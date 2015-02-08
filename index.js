@@ -75,7 +75,7 @@ var Templates = {
     }
 };
 
-var matcher = new RegExp(/[a-zA-Z\-\_]+/);
+var matcher = new RegExp(/[a-zA-Z\-\_\|]+/);
 
 var InputKeyEventHandlers = {
     _inputMethods: [
@@ -110,12 +110,25 @@ var InputKeyEventHandlers = {
 
         this.AC.getCurrentStatementLengths();
 
-        while(i > -1){
+        if (i < 0 && !selectionRange) {
+            this.AC.currentWord  = "";
+            this.AC.previousWord = "";
+            return;
+        }
+
+        while(i < 0){
+
+            if (i === 0 && selectionRange <= this.AC.currentStatementLengths[i]) {
+                this.AC.currentWord = this.AC.currentStatement[i];
+                this.AC.previousWord = this.AC.currentStatement[i+1];
+                return;
+            }
+
             if (selectionRange > this.AC.currentStatementLengths[i]){
 
                 this.AC.currentWord = this.AC.currentStatement[i+1] || this.AC.currentWord || "";
 
-                while (!modifiers[this.AC.currentStatement[i]] && i > -1){
+                while (!modifiers[this.AC.currentStatement[i].toLowerCase()] && i > -1){
                     i--;
                 }
 
@@ -133,13 +146,13 @@ var InputKeyEventHandlers = {
         this.AC.suggestedWords.clearArray();
 
         if (this.AC.currentWord){
-            _.each(modifiers[this.AC.currentWord], function(modifier){
+            _.each(modifiers[this.AC.currentWord.toLowerCase()], function(modifier){
                 this.AC.suggestedWords.push(modifier);
             }, this);
         }
 
-        if (this.AC.previousWord && modifiers[this.AC.previousWord]){
-            _.each(modifiers[this.AC.previousWord], function(modifier){
+        if (this.AC.previousWord && modifiers[this.AC.previousWord.toLowerCase()]){
+            _.each(modifiers[this.AC.previousWord.toLowerCase()], function(modifier){
                 this.AC.suggestedWords.push(modifier);
             }, this);
         }
@@ -186,7 +199,8 @@ var AutoCompleter = function(options){
         "37":   "Arrows",
         "38":   "Arrows",
         "39":   "Arrows",
-        "40":   "ArrowDown"
+        "40":   "ArrowDown",
+        "220":  "Pipe"
     };
 
     for (var i = 65; i < 91; i++) {
@@ -256,29 +270,35 @@ AutoCompleter.prototype.getCurrentStatementLengths = function(){
 };
 
 AutoCompleter.prototype.getCursorWordBounds = function(newWordLength){
-    var word = { start: 0, end: 0 };
+    var word = { start: 0, selectionEnd: 0, end: 0 };
     var i    = this.currentStatement.length - 1;
 
     this.getCurrentStatementLengths();
 
     this.lastCursor = this.lastCursor || this.selectionEl.selectionStart;
 
-    if (i===0) {
-        word.start = 0;
-        word.end   = newWordLength;
+    word.selectionEnd = this.lastCursor;
+
+    if (i===0){
+        if (this.previousWord) {
+            word.start        = this.previousWord.length + 1;
+            word.selectionEnd = this.previousWord.length + 1;
+        }
+        word.end = word.start + newWordLength;
         return word;
     }
 
     while (i > -1){
-        if (this.lastCursor > this.currentStatementLengths[i]){
+        if (this.lastCursor >= this.currentStatementLengths[i]){
             word.start = this.currentStatementLengths[i];
 
-            if (word.start + newWordLength < word.start + this.currentWord.length){
-                word.end = word.start + this.currentWord.length;
+            if (word.start + newWordLength > word.start + this.currentWord.length){
+                word.selectionEnd = word.start + this.currentWord.length;
             } else {
-                word.end = word.start + newWordLength || (this.currentStatementLengths[i+1] - 1) || word.start;
+                word.selectionEnd = word.start + newWordLength || (this.currentStatementLengths[i+1] - 1) || word.start;
             }
 
+            word.end = word.start + newWordLength;
             return word;
         }
 
@@ -341,10 +361,12 @@ AutoCompleter.prototype.makeChoiceList = function(options){
     this.choiceListContainerEl.appendChild(this.choiceListEl);
 };
 
-AutoCompleter.prototype.assignHandler = function(options, keyCode){
+AutoCompleter.prototype.assignHandler = function(options, keyCode, shiftKey){
     var key = this.keyCodeDict[keyCode];
 
     if (!key) return;
+
+    if (key === 'Pipe' && !shiftKey) return;
 
     if (options.not  && key === options.not)  return;
     if (options.only && key !== options.only) return;
@@ -366,7 +388,7 @@ AutoCompleter.prototype.handleSelectionElKeyEvents = function(options, e){
 
     this.lastCursor = this.selectionEl.selectionStart;
 
-    handler = this.assignHandler.call(this, options, e.keyCode)
+    handler = this.assignHandler.call(this, options, e.keyCode, e.shiftKey);
 
     if ( !this.matches(ch) && (e.metaKey || !handler) ) return;
 
@@ -406,7 +428,7 @@ AutoCompleter.prototype.handleChoiceListContainerElEvents = function(e){
             console.log('wordstart:', word.start);
             event.initTextEvent('textInput', true, true, null, value);
 
-            this.selectionEl.setSelectionRange(word.start, word.end);
+            this.selectionEl.setSelectionRange(word.start, word.selectionEnd);
             this.selectionEl.dispatchEvent(event); // fire the event on the the textarea
             this.selectionEl.setSelectionRange(word.end, word.end);
         }
@@ -433,8 +455,9 @@ AutoCompleter.prototype.initializeKeyEventHandlers = function(){
     this.keyEventHandlers.inArrows    = Object.create(InputKeyEventHandlers, { AC: { value: this }, name: { value: 'inArrows'    } });
     this.keyEventHandlers.inArrowDown = Object.create(InputKeyEventHandlers, { AC: { value: this }, name: { value: 'inArrowDown' } });
     this.keyEventHandlers.inBackspace = Object.create(InputKeyEventHandlers, { AC: { value: this }, name: { value: 'inBackspace' } });
-    this.keyEventHandlers.inSpace     = Object.create(InputKeyEventHandlers, { AC: { value: this }, name: { value: 'inSpace'     } });
     this.keyEventHandlers.inPaste     = Object.create(InputKeyEventHandlers, { AC: { value: this }, name: { value: 'inPaste'     } });
+    this.keyEventHandlers.inPipe      = Object.create(InputKeyEventHandlers, { AC: { value: this }, name: { value: 'inPipe'      } });
+    this.keyEventHandlers.inSpace     = Object.create(InputKeyEventHandlers, { AC: { value: this }, name: { value: 'inSpace'     } });
     this.keyEventHandlers.inVarchar   = Object.create(InputKeyEventHandlers, { AC: { value: this }, name: { value: 'inVarchar'   } });
 
     this.keyEventHandlers.inArrowDown.handleEvent = function(e){
@@ -466,7 +489,7 @@ AutoCompleter.prototype.initializeKeyEventHandlers = function(){
 
     this.keyEventHandlers.inSpace.assignPreviousAndCurrentWords = function(e, ch){
         if (this.AC.currentStatement.length && this.AC.currentStatement[this.AC.currentStatement.length-1]){
-            this.AC.previousWord = this.AC.currentStatement[this.AC.currentStatement.length-1].toLowerCase();
+            this.AC.previousWord = this.AC.currentStatement[this.AC.currentStatement.length-1];
         } else {
             this.AC.previousWord = this.AC.currentWord;
         }
@@ -477,9 +500,14 @@ AutoCompleter.prototype.initializeKeyEventHandlers = function(){
     this.keyEventHandlers.inSpace.assignSuggestedWords = function(e){
         if (!this.AC.currentWord){
             this.AC.suggestedWords.clearArray();
+        }
 
-        } else if (this.AC.previousWord && modifiers[this.AC.previousWord]){
-            this.AC.suggestedWords = this.AC.suggestedWords.concat(modifiers[this.AC.previousWord]);
+        if (this.AC.previousWord && modifiers[this.AC.previousWord.toLowerCase()]){
+            _.each(modifiers[this.AC.previousWord.toLowerCase()], function(modifier){
+                this.AC.suggestedWords.push(modifier);
+            }, this);
+
+            this.AC.suggestedWords.sort();
         }
     };
 
@@ -496,6 +524,15 @@ AutoCompleter.prototype.initializeKeyEventHandlers = function(){
             var last = this.AC.currentStatement.length-1;
             this.AC.currentWord = this.AC.currentStatement[last];
         }
+    };
+
+    this.keyEventHandlers.inPipe.assignScanOptions = function(e){
+        this.AC.scanTextOptions = { str: null, addLastWord: false };
+    };
+
+    this.keyEventHandlers.inPipe.assignPreviousAndCurrentWords = function(e, ch){
+        this.AC.currentWord  = "";
+        this.AC.previousWord = "";
     };
 
     this.keyEventHandlers.inVarchar.assignPreviousAndCurrentWords = function(e, ch){
