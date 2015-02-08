@@ -63,12 +63,13 @@ var Templates = {
         return ([
             "#choice-list-container {",
             "  display:none;",
+            "  width:100%;",
             "}",
             ".choice-list {",
             "  width: 100%;",
             "  position: relative;",
             "  background-color: white;",
-            "  font-size: 1.25rem;",
+            "  font-size: 1.1rem;",
             "}"
         ].join('\n'));
     }
