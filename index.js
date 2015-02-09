@@ -163,6 +163,8 @@ var InputKeyEventHandlers = {
         console.log('handle view:', this.AC);
         if (!this.AC.currentWord.length || !this.AC.suggestedWords.length) {
             this.AC.choiceListContainerEl.style.display = 'none';
+        } else {
+            this.AC.choiceListContainerEl.style.display = 'inline-block';
         }
     },
 
@@ -481,6 +483,22 @@ AutoCompleter.prototype.initializeKeyEventHandlers = function(){
 
     this.keyEventHandlers.inBackspace.assignScanOptions = function(e){
         this.AC.scanTextOptions = { str: null, addLastWord: false };
+    };
+
+    this.keyEventHandlers.inBackspace.assignSuggestedWords = function(e){
+        this.AC.suggestedWords.clearArray();
+        this.AC.keyEventHandlers.inVarchar.assignSuggestedWords.apply(this, arguments);
+    };
+
+    this.keyEventHandlers.inBackspace.assignPreviousAndCurrentWords = function(e){
+        this.AC.keyEventHandlers.inVarchar.assignPreviousAndCurrentWords.apply(this, arguments);
+    };
+
+    this.keyEventHandlers.inBackspace.handleView = function(e){
+        console.log('INSPACE HANDLE VIEW', this);
+        if (this.AC.choiceListContainerEl.style.display != 'none'){
+            this.AC.choiceListContainerEl.style.display = 'none';
+        }
     };
 
     this.keyEventHandlers.inSpace.assignScanOptions = function(e){
